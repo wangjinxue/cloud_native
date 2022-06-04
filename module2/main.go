@@ -1,16 +1,20 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"runtime"
 )
 
 func main(){
 	http.HandleFunc("/",indexHandler)
-	log.Fatal(http.ListenAndServe(":9999",nil))
+	http.HandleFunc("/healthz",healthzHandler)
+	http.ListenAndServe(":80",nil)
 }
-
+func healthzHandler(w http.ResponseWriter,req *http.Request){
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("ok"))
+}
 func indexHandler(w http.ResponseWriter,req *http.Request){
 	header := req.Header
 	//1、读取请求头并写入响应头
@@ -21,7 +25,8 @@ func indexHandler(w http.ResponseWriter,req *http.Request){
 	v := runtime.Version()
 	w.Header().Set("version",v)
 	//3、记录日志
-	statusCode :=req.Response.StatusCode
-	println(statusCode)
+	w.WriteHeader(http.StatusOK)
+
+	fmt.Println("statusCode:",http.StatusOK,",ip:",req.RemoteAddr)
 }
 
