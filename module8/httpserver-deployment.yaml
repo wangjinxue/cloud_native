@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpserver-deployment
+  labels:
+    app: httpserver
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: httpserver
+  template:
+    metadata:
+      labels:
+        app: httpserver
+    spec:
+      containers:
+      - name: httpserver
+        image: wangjinxue2011/httpserver:0.0.1
+		#资源限制CPU0.1个，内存256M
+		resources:
+		  limits:
+		  requests:
+		  memory: 256Mi
+		  cpu: 100m
+        ports:
+        - containerPort: 8080
+		#探活
+		readinessProbe:
+		  httpGet:
+		    path: /healthz
+			port: 8080
+		  initialDelaySeconds: 5
+		  #每隔几秒检查一下
+		  periodSeconds: 5
+		  #成功
+		  successThreshold: 2
