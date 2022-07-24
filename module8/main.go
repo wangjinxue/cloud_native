@@ -4,35 +4,23 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"runtime"
-	"sync"
+	"syscall"
+	"time"
 )
 
-func startHttpServer(wg *sync.WaitGroup) *http.Server {
-	srv := &http.Server{Addr: ":8080"}
+func main() {
+	//ctx, cancel := context.WithCancel(context.Background())
+	//
+	//mux := http.NewServeMux()
+	httpServer := &http.Server{Addr: ":8080"}
 
 	http.HandleFunc("/", indexHandler)
 	http.HandleFunc("/healthz", healthzHandler)
-
-	go func() {
-		defer wg.Done() // let main know we are done cleaning up
-
-		// always returns error. ErrServerClosed on graceful close
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			// unexpected error. port in use?
-			log.Fatalf("ListenAndServe(): %v", err)
-		}
-	}()
-
-	// returning reference so caller can call Shutdown()
-	return srv
-}
-func main() {
-	httpServerExitDone := &sync.WaitGroup{}
-
-	httpServerExitDone.Add(1)
-	srv := startHttpServer(httpServerExitDone)
 
 	log.Printf("main: serving for 10 seconds")
 
@@ -40,17 +28,47 @@ func main() {
 
 	log.Printf("main: stopping HTTP server")
 
-	// now close the server gracefully ("shutdown")
-	// timeout could be given with a proper context
-	// (in real world you shouldn't use TODO()).
-	if err := srv.Shutdown(context.TODO()); err != nil {
-		panic(err) // failure/timeout shutting down the server gracefully
+	// Run server
+	go func() {
+		if err := httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			// it is fine to use Fatal here because it is not main gorutine
+			log.Fatalf("HTTP server ListenAndServe: %v", err)
+		}
+	}()
+
+	signalChan := make(chan os.Signal, 1)
+
+	signal.Notify(
+		signalChan,
+		syscall.SIGHUP,  // kill -SIGHUP XXXX
+		syscall.SIGINT,  // kill -SIGINT XXXX or Ctrl+c
+		syscall.SIGQUIT, // kill -SIGQUIT XXXX
+	)
+
+	<-signalChan
+	log.Print("os.Interrupt - shutting down...\n")
+
+	go func() {
+		<-signalChan
+		log.Fatal("os.Kill - terminating...\n")
+	}()
+
+	gracefullCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+
+	if err := httpServer.Shutdown(gracefullCtx); err != nil {
+		log.Printf("shutdown error: %v\n", err)
+		defer os.Exit(1)
+		return
+	} else {
+		log.Printf("gracefully stopped\n")
 	}
 
-	// wait for goroutine started in startHttpServer() to stop
-	httpServerExitDone.Wait()
+	// manually cancel context if not using httpServer.RegisterOnShutdown(cancel)
+	cancel()
 
-	log.Printf("main: done. exiting")
+	defer os.Exit(0)
+	return
 }
 func healthzHandler(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusOK)
