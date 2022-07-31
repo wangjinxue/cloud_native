@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpserver-deployment
+  labels:
+    app: httpserver
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: httpserver
+  template:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "80"
+    metadata:
+      labels:
+        app: httpserver
+    spec:
+      containers:
+      - name: httpserver
+        image: wangjinxue2011/httpserver:0.0.1
+        ports:
+          - containerPort: 80
+		#资源限制CPU0.1个，内存256M
+		resources:
+		  limits:
+		  requests:
+		  memory: 256Mi
+		  cpu: 100m
+		#探活
+		readinessProbe:
+		  httpGet:
+		    path: /healthz
+			port: 80
+		  initialDelaySeconds: 5
+		  #每隔几秒检查一下
+		  periodSeconds: 5
+		  #成功
+		  successThreshold: 2
